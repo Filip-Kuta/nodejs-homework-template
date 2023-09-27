@@ -1,44 +1,59 @@
-const contactsData = require('./contacts.json');
+const fs = require("fs/promises");
+const path = require("path");
+const { nanoid } = require("nanoid");
+
+
+const contactsPath = path.join(__dirname, "contacts.json");
+
+const writeContact = async (contacts) =>
+  await fs.writeFile(contactsPath, JSON.stringify(contacts, null, 2));
 
 const listContacts = async () => {
-  return contactsData;
-}
+  const data = await fs.readFile(contactsPath);
+
+  return JSON.parse(data);
+};
 
 const getContactById = async (contactId) => {
-  const contact = contactsData.find((c) => c.id === contactId);
-  return contact;
-}
+  const contacts = await listContacts();
+  const result = contacts.find((contact) => contact.id === contactId);
+
+  return result || null;
+};
 
 const removeContact = async (contactId) => {
-  const index = contactsData.findIndex((c) => c.id === contactId);
+  const contacts = await listContacts();
+  const index = contacts.findIndex((contact) => contact.id === contactId);
   if (index === -1) {
-    return null; // Kontakt o podanym ID nie istnieje
+    return null;
   }
-  const removedContact = contactsData.splice(index, 1)[0];
-  return removedContact;
-}
+  const [result] = contacts.splice(index, 1);
+  await writeContact(contacts);
+  return result;
+};
 
 const addContact = async (body) => {
+  const contacts = await listContacts();
   const newContact = {
-    id: Date.now().toString(), // Tworzymy unikalny ID
+    id: nanoid(),
     ...body,
   };
-  contactsData.push(newContact);
+  contacts.push(newContact);
+  await writeContact(contacts);
+
   return newContact;
-}
+};
 
 const updateContact = async (contactId, body) => {
-  const index = contactsData.findIndex((c) => c.id === contactId);
+  const contacts = await listContacts();
+  const index = contacts.findIndex((contact) => contact.id === contactId);
   if (index === -1) {
-    return null; // Kontakt o podanym ID nie istnieje
+    return null;
   }
-  const updatedContact = {
-    ...contactsData[index],
-    ...body,
-  };
-  contactsData[index] = updatedContact;
-  return updatedContact;
-}
+  contacts[index] = { contactId, ...body };
+  await writeContact(contacts);
+  return contacts[index];
+};
 
 module.exports = {
   listContacts,

@@ -1,98 +1,94 @@
-const express = require('express');
-const app = express();
-const morgan = require('morgan');
-const cors = require('cors');
-const Joi = require('joi'); // Importuj moduł Joi do walidacji danych
+const express = require("express");
+const Joi = require("joi");
 
-// Importuj funkcję do generowania unikalnych identyfikatorów (przykładowa implementacja)
-function generateUniqueId() {
-  // Implementacja generowania unikalnego identyfikatora
-  // Możesz wykorzystać na przykład bibliotekę uuid lub inny sposób, który uważasz za odpowiedni.
-  return 'generated-id'; // Przykład: zwracam stałą wartość "generated-id" dla uproszczenia
-}
+const {
+  listContacts,
+  getContactById,
+  removeContact,
+  addContact,
+  updateContact,
+} = require("../../models/contacts");
 
-// Importuj funkcję do dodawania kontaktu (zakładam, że masz tę funkcję zaimplementowaną)
-const { addContact } = require('./contacts'); // Zastąp ścieżkę i funkcję odpowiednią do swojej implementacji
+const { RequestError } = require("../../helpers");
 
-// Konfiguracja middleware
-app.use(express.json());
-app.use(morgan('dev'));
-app.use(cors());
+const router = express.Router();
 
-// Definiuj endpointy i obsługę
+const addSchema = Joi.object({
+  name: Joi.string().required(),
+  email: Joi.string()
+    .email({
+      minDomainSegments: 2,
+      tlds: { allow: ["com", "net"] },
+    })
+    .required(),
+  phone: Joi.string().required(),
+});
 
-// GET /api/contacts
-app.get('/api/contacts', async (req, res) => {
+router.get("/", async (req, res, next) => {
   try {
-    // Implementacja obsługi GET /api/contacts
+    const result = await listContacts();
+    res.json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    next(error);
   }
 });
 
-// GET /api/contacts/:id
-app.get('/api/contacts/:id', async (req, res) => {
+router.get("/:contactId", async (req, res, next) => {
   try {
-    // Implementacja obsługi GET /api/contacts/:id
+    const { contactId } = req.params;
+    const result = await getContactById(contactId);
+    if (!result) {
+      throw RequestError(404, "Not found");
+    }
+    res.json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    next(error);
   }
 });
 
-// POST /api/contacts
-app.post('/api/contacts', async (req, res) => {
-  const { name, email, phone } = req.body;
-
-  // Walidacja danych wejściowych przy użyciu Joi
-  const schema = Joi.object({
-    name: Joi.string().required(),
-    email: Joi.string().email().required(),
-    phone: Joi.string().required(),
-  });
-
-  const { error } = schema.validate({ name, email, phone });
-
-  if (error) {
-    return res.status(400).json({ message: error.details[0].message });
-  }
-
+router.post("/", async (req, res, next) => {
   try {
-    const newContact = {
-      id: generateUniqueId(), // Wygeneruj unikalny identyfikator
-      name,
-      email,
-      phone,
-    };
-
-    // Dodaj nowy kontakt do bazy danych lub pliku
-    await addContact(newContact);
-
-    res.status(201).json(newContact);
+    const { error } = addSchema.validate(req.body);
+    if (error) {
+      throw RequestError(400, "missing required name field");
+    }
+    const result = await addContact(req.body);
+    res.status(201).json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    next(error);
   }
 });
 
-// DELETE /api/contacts/:id
-app.delete('/api/contacts/:id', async (req, res) => {
+router.delete("/:contactId", async (req, res, next) => {
   try {
-    // Implementacja obsługi DELETE /api/contacts/:id
+    const { contactId } = req.params;
+    const result = await removeContact(contactId);
+    if (!result) {
+      throw RequestError(404, "Not found");
+    }
+    res.json({
+      message: "contact deleted",
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    next(error);
   }
 });
 
-// PUT /api/contacts/:id
-app.put('/api/contacts/:id', async (req, res) => {
+router.put("/:contactId", async (req, res, next) => {
   try {
-    // Implementacja obsługi PUT /api/contacts/:id
+    const { error } = addSchema.validate(req.body);
+    if (error) {
+      throw RequestError(400, "missing fields");
+    }
+    const { contactId } = req.params;
+    const result = await updateContact(contactId, req.body);
+    if (!result) {
+      throw RequestError(404, "Not found");
+    }
+    res.status(200).json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    next(error);
   }
 });
 
-// Rozpoczęcie nasłuchiwania na określonym porcie
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+module.exports = router;
